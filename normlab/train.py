@@ -39,6 +39,7 @@ class Config:
     train_tokens: str | None = None
     val_tokens: str | None = None
     device: str = 'auto'
+    save_checkpoints: bool = False
 
     def validate(self):
         if self.stage not in {'simple', 'medium', 'complex'}:
@@ -140,6 +141,8 @@ def run_one(c: Config, label: str, seed: int, train, val, device: torch.device, 
     metrics, profiles = [], []
     status = 'completed'
     started = time.monotonic()
+    baseline_val, baseline_acc = evaluate(model, c, val, device)
+    max_grad, loss_spikes, rolling_losses = 0.0, 0, []
     logger.info('run start stage={} condition={} seed={} params={} device={}',
                 c.stage, label, seed, sum(p.numel() for p in model.parameters()), device)
     for step in range(1, c.steps + 1):
@@ -167,6 +170,13 @@ def run_one(c: Config, label: str, seed: int, train, val, device: torch.device, 
             status = f'non_finite_grad_step_{step}'
             logger.error('{}', status)
             break
+        max_grad = max(max_grad, grad)
+        # A transient loss spike is a diagnostic, not by itself a run failure.
+        # Compare against the PREVIOUS 20 losses, never the current value.
+        previous_median = float(np.median(rolling_losses[-20:])) if len(rolling_losses) >= 10 else None
+        is_spike = bool(previous_median is not None and float(loss) > max(2.0, 3.0 * previous_median))
+        loss_spikes += int(is_spike)
+        rolling_losses.append(float(loss))
         if c.grad_clip > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), c.grad_clip)
         if sampled:
@@ -174,20 +184,30 @@ def run_one(c: Config, label: str, seed: int, train, val, device: torch.device, 
                              'activations': [b.trace for b in model.blocks]})
         optimizer.step()
         row = {'step': step, 'lr': lr, 'train_loss': float(loss.item()),
-               'train_accuracy': accuracy, 'grad_global_preclip': grad}
+               'train_accuracy': accuracy, 'grad_global_preclip': grad, 'loss_spike': is_spike}
         if sampled:
             row['val_loss'], row['val_accuracy'] = evaluate(model, c, val, device)
             logger.info('condition={} seed={} step={}/{} train={:.4f} val={:.4f} grad={:.4g} lr={:.3g}',
                         label, seed, step, c.steps, row['train_loss'], row['val_loss'], grad, lr)
         metrics.append(row)
+    final_val = next((r['val_loss'] for r in reversed(metrics) if 'val_loss' in r), None)
+    final_acc = next((r['val_accuracy'] for r in reversed(metrics) if 'val_accuracy' in r), None)
+    if final_val is not None and not math.isfinite(final_val):
+        status = 'non_finite_validation'
     summary = {'stage': c.stage, 'condition': label, 'seed': seed, 'status': status,
+               'baseline_val_loss': baseline_val, 'baseline_val_accuracy': baseline_acc,
+               'val_loss_improvement': baseline_val - final_val if final_val is not None else None,
+               'final_val_accuracy': final_acc, 'max_grad_global_preclip': max_grad,
+               'loss_spike_count': loss_spikes, 'peak_lr': c.lr, 'warmup_steps': c.warmup if warm else 0,
                'elapsed_seconds': round(time.monotonic() - started, 2),
                'parameters': sum(p.numel() for p in model.parameters()),
                'steps_completed': len(metrics),
                'best_val_loss': min((r['val_loss'] for r in metrics if 'val_loss' in r), default=None),
-               'final_val_loss': next((r['val_loss'] for r in reversed(metrics) if 'val_loss' in r), None)}
+               'final_val_loss': final_val}
     dest = out / f'{label}_seed{seed}'
     dest.mkdir(parents=True, exist_ok=True)
+    if c.save_checkpoints:
+        torch.save(model.cpu().state_dict(), dest / 'model_state.pt')
     (dest / 'metrics.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in metrics), encoding='utf-8')
     (dest / 'profiles.json').write_text(json.dumps(profiles, indent=2), encoding='utf-8')
     (dest / 'summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
