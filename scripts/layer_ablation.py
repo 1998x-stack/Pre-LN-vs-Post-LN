@@ -41,6 +41,8 @@ def main(argv=None):
     p.add_argument('--run', required=True, help='Directory with config.json + per-arm checkpoints')
     p.add_argument('--out', default=None)
     p.add_argument('--device', default='cpu')
+    p.add_argument('--val-limit', type=int, default=256,
+                   help='Maximum fixed validation items for fast ablations (0=all)')
     a = p.parse_args(argv)
     root = Path(a.run)
     out = Path(a.out) if a.out else root / 'ablation'
@@ -50,7 +52,10 @@ def main(argv=None):
     c = Config(**params)
     c.validate()
     _, val = prepare(c)
+    if a.val_limit and c.stage in ('simple', 'medium'):
+        val = (val[0][:a.val_limit], val[1][:a.val_limit])
     device = torch.device(a.device)
+    torch.set_num_threads(1)
     rows = []
     for summary_file in sorted(root.glob('*_seed*/summary.json')):
         folder = summary_file.parent
@@ -75,6 +80,8 @@ def main(argv=None):
         raise RuntimeError('no checkpoints found; train using --save-checkpoints first')
     df = pd.DataFrame(rows)
     df.to_csv(out / 'layer_ablation.csv', index=False)
+    (out / 'protocol.json').write_text(json.dumps({'validation_limit':a.val_limit,
+        'stage':c.stage,'ablation':'skip entire residual block, including Post-LN normalizations'}, indent=2))
     sns.set_theme(style='whitegrid')
     fig, ax = plt.subplots(figsize=(11, 5.5), layout='constrained')
     sns.lineplot(data=df, x='layer', y='loss_delta', hue='condition',

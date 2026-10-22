@@ -4,7 +4,7 @@
 
 An inspectable PyTorch research lab for comparing **Pre-LayerNorm**, **Post-LayerNorm**, **Post-LayerNorm + learning-rate warmup**, and the extra **Pre-LayerNorm + warmup** control. Focus: gradient propagation, activation growth, convergence, and trainability at increasing depth.
 
-> **Status:** Includes fully runnable training/visualization workflows. Example plots represent **small CPU demonstrations**, not a statistically powered result. No claimed complex-language-model benchmark until the real-data run is performed.
+> **Status (2026-10-22):** A **108-run CPU residual-MLP stability sweep** and **192 evaluation-time block ablations** are now published with raw CSVs, static figures, and a Plotly matrix. They do **not** establish GPU/real-text LLM performance; a GPU runner workflow is provided but has not run. See [measured results](docs/empirical_results_2026-10-22.md).
 
 ## Experimental matrix
 
@@ -99,15 +99,38 @@ The data preparation script streams official `train` and `validation` splits, en
 
 Validation for Level 3 uses fixed windows drawn from the official validation split with a dedicated random seed. It is a reproducible proxy rather than an exhaustive evaluation over all possible contexts. Perplexity can be computed as `exp(val_loss)` for cross-entropy calculated with the stated GPT-2 tokenizer.
 
-## Robustness sweep — learning rate × depth
+## Empirical robustness sweep — learning rate × depth
 
 ```bash
 python scripts/run_matrix.py \
-  --depths 4 16 32 --lrs 0.001 0.003 0.01 \
-  --steps 250 --warmup 50 --out runs/stability
+  --stage simple --depths 4 16 32 --lrs .003 .03 .1 \
+  --seeds 7 19 31 --width 32 --steps 120 --warmup 24 \
+  --out runs/stability
 ```
 
-Produces `stability.csv` and a per-condition `stability_*.png` heatmap. **Failure is strictly non-finite loss/gradient** in the current implementation; it is not a general definition of optimization instability. A zero failure-rate square does not imply convergence. Increasing depths/LR can be costly; start small.
+Produces `stability_runs.csv`, `stability_summary.csv`, `RESULTS.md`, and multiple shared-scale heatmaps (`phase_final_loss_mean.png`, `phase_near_chance_rate.png`, `phase_failure_rate.png`, etc.), with `matrix_interactive.html` for Plotly interactions. Numeric failure, near-chance learning, and transient loss spikes are separate quantities. Cached completed grid cells can be reused on reruns; `--no-resume` forces rerunning every cell.
+
+**Measured results and plots:** [CPU 108-run sweep + layer ablation](docs/empirical_results_2026-10-22.md).
+
+## Layer ablation
+
+Train checkpoints with `--save-checkpoints`, then run:
+
+```bash
+python scripts/layer_ablation.py --run runs/ablation_fit --val-limit 256
+```
+
+This measures validation CE with each entire block replaced by identity, one at a time. It is not a direct test of Jacobian singular values or a decomposition of Post-LN normalization effects.
+
+## Real-text GPU benchmark — not yet executed
+
+On a machine with CUDA and access to the Hugging Face WikiText-2 dataset:
+
+```bash
+bash scripts/run_real_text_gpu.sh
+```
+
+The manual `.github/workflows/real_text_gpu.yml` requires a **self-hosted GPU runner** labeled `gpu`. It uploads artifacts when the job ends; it does not silently start training on hosted CPU machines. Budget time/GPU-hours before dispatching this 108-run real-text matrix.
 
 ## What plots mean (and do not mean)
 

@@ -37,6 +37,9 @@ def collect(rows, depth, lr, directory, min_improvement):
                             or improvement < min_improvement)
         rows.append({'depth': depth, 'lr': lr, **run, 'failed': failed,
                      'did_not_learn': did_not_learn,
+                     'near_chance': (int(failed or run.get('final_val_loss') is None or
+                         run['final_val_loss'] >= math.log(2.0)-.02)
+                         if run['stage'] == 'simple' else float('nan')),
                      'spikes_per_100_steps': 100 * run.get('loss_spike_count', 0)
                      / max(1, run['steps_completed'])})
 
@@ -45,6 +48,7 @@ def summarize(df):
     return (df.groupby(['condition', 'depth', 'lr'], as_index=False)
             .agg(n=('seed', 'count'), failure_rate=('failed', 'mean'),
                  nonlearning_rate=('did_not_learn', 'mean'),
+                 near_chance_rate=('near_chance', 'mean'),
                  final_loss_mean=('final_val_loss', 'mean'),
                  final_loss_std=('final_val_loss', 'std'),
                  improvement_mean=('val_loss_improvement', 'mean'),
@@ -58,11 +62,16 @@ def plots(table, out):
     measures = [
         ('failure_rate', 'Numerical failure fraction (NaN/Inf)', 'Reds', 0, 1, '.2f'),
         ('nonlearning_rate', 'Did-not-learn fraction (thresholded)', 'OrRd', 0, 1, '.2f'),
+        ('near_chance_rate', 'Near-chance validation-loss fraction (simple only)', 'Reds', 0, 1, '.2f'),
         ('improvement_mean', 'Validation loss improvement', 'YlGnBu', None, None, '.3f'),
         ('final_loss_mean', 'Final validation cross-entropy', 'viridis_r', None, None, '.3f'),
         ('spike_rate', 'Loss spikes per 100 steps', 'magma', 0, None, '.1f'),
     ]
     for key, title, cmap, low, high, fmt in measures:
+        if table[key].notna().any():
+            low = float(table[key].min()) if low is None else low
+            high = float(table[key].max()) if high is None else high
+            if high <= low: high = low + 1e-8
         fig, axes = plt.subplots(1, 4, figsize=(20, 4.8), layout='constrained', sharey=True)
         for ax, variant in zip(axes, order):
             one = table[table.condition == variant]
@@ -72,7 +81,7 @@ def plots(table, out):
                         linecolor='white', annot_kws={'size': 10})
             ax.set_title(variant)
             ax.set_xlabel('Peak learning rate')
-            ax.set_ylabel('Transformer / MLP depth' if variant == 'pre' else '')
+            ax.set_ylabel('Network depth (blocks)' if variant == 'pre' else '')
         fig.suptitle(f'{title} | observed, not extrapolated', fontsize=16)
         fig.savefig(out / f'phase_{key}.png', dpi=150, bbox_inches='tight')
         plt.close(fig)
@@ -162,6 +171,7 @@ def main(argv=None):
         f'- Nonlearning criterion: `baseline_val_loss - final_val_loss < {args.min_improvement}`. '
         'This is not a numerical failure and is sensitive to the training budget.\n'
         '- Numerical failure: nonfinite loss / gradient / validation as detected by the runner.\n'
+        '- Near chance (classification only): final validation cross-entropy >= ln(2) - 0.02.\n'
         '- Loss spike: training loss > max(2.0, 3x preceding 20-step median) after at least 10 prior steps.\n\n'
         '## Aggregate per-configuration measurements\n\n'
         + table.to_markdown(index=False, floatfmt='.4f') + '\n\n'

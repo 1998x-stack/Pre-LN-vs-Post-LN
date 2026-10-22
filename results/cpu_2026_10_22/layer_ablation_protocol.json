@@ -1,0 +1,5 @@
+{
+  "validation_limit": 256,
+  "stage": "simple",
+  "ablation": "skip entire residual block, including Post-LN normalizations"
+}

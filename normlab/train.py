@@ -174,9 +174,9 @@ def run_one(c: Config, label: str, seed: int, train, val, device: torch.device, 
         # A transient loss spike is a diagnostic, not by itself a run failure.
         # Compare against the PREVIOUS 20 losses, never the current value.
         previous_median = float(np.median(rolling_losses[-20:])) if len(rolling_losses) >= 10 else None
-        is_spike = bool(previous_median is not None and float(loss) > max(2.0, 3.0 * previous_median))
+        is_spike = bool(previous_median is not None and float(loss.detach()) > max(2.0, 3.0 * previous_median))
         loss_spikes += int(is_spike)
-        rolling_losses.append(float(loss))
+        rolling_losses.append(float(loss.detach()))
         if c.grad_clip > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), c.grad_clip)
         if sampled:

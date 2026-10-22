@@ -1,0 +1,38 @@
+{
+  "stage": "simple",
+  "depths": [
+    4,
+    16,
+    32
+  ],
+  "lrs": [
+    0.003,
+    0.03,
+    0.1
+  ],
+  "seeds": [
+    7,
+    19,
+    31
+  ],
+  "variants": [
+    "pre",
+    "post",
+    "post_warm",
+    "pre_warm"
+  ],
+  "steps": 120,
+  "warmup": 24,
+  "width": 32,
+  "heads": 4,
+  "batch": 64,
+  "log_every": 30,
+  "min_improvement": 0.02,
+  "context": 128,
+  "vocab_size": 50257,
+  "train_tokens": null,
+  "val_tokens": null,
+  "device": "auto",
+  "out": "/mnt/data/norm-workbench/cpu_matrix",
+  "no_resume": false
+}
