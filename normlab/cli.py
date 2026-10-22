@@ -25,6 +25,7 @@ def main():
     p.add_argument('--train-tokens')
     p.add_argument('--val-tokens')
     p.add_argument('--device', default='auto')
+    p.add_argument('--save-checkpoints', action='store_true', help='Save model weights for later layer ablation')
     a = vars(p.parse_args())
     a['variants'], a['seeds'] = tuple(a['variants']), tuple(a['seeds'])
     try:

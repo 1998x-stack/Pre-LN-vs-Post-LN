@@ -1,0 +1,26 @@
+name: Real text GPU benchmark (manual, self-hosted)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_gpu_benchmark:
+        description: 'Type YES to confirm training on your own GPU runner'
+        required: true
+        type: string
+jobs:
+  benchmark:
+    if: ${{ inputs.confirm_gpu_benchmark == 'YES' }}
+    runs-on: [self-hosted, linux, x64, gpu]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: bash scripts/run_real_text_gpu.sh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wikitext2-gpu-measurements
+          path: runs/gpu_wikitext2_matrix/
+          if-no-files-found: warn
+          retention-days: 30
