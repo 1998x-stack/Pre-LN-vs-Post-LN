@@ -1,0 +1,25 @@
+name: tests
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install package
+        run: python -m pip install -e '.[dev]'
+      - name: Run unit tests
+        run: python -m pytest -q
+      - name: Quick end-to-end smoke test
+        run: python -m normlab.cli --stage simple --layers 2 --width 16 --heads 4 --steps 2 --batch 8 --log-every 1 --seeds 7 --out runs/ci
+      - name: Upload demo charts and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-charts
+          path: runs/ci/
