@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pre-ln-vs-post-ln"
+version = "0.1.0"
+description = "Controlled experiments comparing normalization placement and warmup"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.2",
+  "numpy>=1.26",
+  "loguru>=0.7",
+  "matplotlib>=3.8",
+  "seaborn>=0.13",
+  "pandas>=2.1",
+  "plotly>=5.22",
+]
+
+[project.optional-dependencies]
+datasets = ["datasets>=2.20", "tiktoken>=0.7"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["normlab*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
