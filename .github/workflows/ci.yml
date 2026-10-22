@@ -17,7 +17,7 @@ jobs:
       - name: Run unit tests
         run: python -m pytest -q
       - name: Quick end-to-end smoke test
-        run: python -m normlab.cli --stage simple --layers 2 --width 16 --heads 4 --steps 2 --batch 8 --log-every 1 --seeds 7 --out runs/ci
+        run: python -m normlab.cli --stage simple --layers 2 --width 16 --heads 4 --steps 2 --warmup 1 --batch 8 --log-every 1 --seeds 7 --out runs/ci
       - name: Upload demo charts and logs
         uses: actions/upload-artifact@v4
         with:
